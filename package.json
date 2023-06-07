@@ -1,12 +1,12 @@
 {
-  "name": "rapidoc",
-  "version": "9.3.5-beta",
+  "name": "@fifteen/rapidoc",
+  "version": "9.4.5",
   "description": "RapiDoc - Open API spec viewer with built in console",
   "author": "Mrinmoy Majumdar <mrin9@yahoo.com>",
   "homepage": "https://rapidocweb.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rapi-doc/RapiDoc.git"
+    "url": "git+https://github.com/birotaio/RapiDoc.git"
   },
   "license": "MIT",
   "keywords": [
@@ -78,5 +78,11 @@
   },
   "engines": {
     "node": ">=18.16.0"
+  },
+  "bugs": {
+    "url": "https://github.com/birotaio/RapiDoc/issues"
+  },
+  "directories": {
+    "doc": "docs"
   }
 }
