@@ -495,6 +495,11 @@ export default class ApiRequest extends LitElement {
                         const requestPanelEl = this.getRequestPanel(e);
                         this.liveCURLSyntaxUpdate(requestPanelEl);
                       }}
+                      @keydown=${(e) => {
+                        if ((e.keyCode === 10 || e.keyCode === 13) && e.ctrlKey) {
+                          return this.onTryClick(e);
+                        }
+                      }}
                     />`
                 }
             </td>`
@@ -692,6 +697,12 @@ export default class ApiRequest extends LitElement {
                       const requestPanelEl = this.getRequestPanel(e);
                       this.liveCURLSyntaxUpdate(requestPanelEl);
                     }}
+                    @keydown=${(e) => {
+                      if ((e.keyCode === 10 || e.keyCode === 13) && e.ctrlKey) {
+                        return this.onTryClick(e);
+                      }
+                    }}
+
                   ></textarea>
                 </div>  
               `)}
