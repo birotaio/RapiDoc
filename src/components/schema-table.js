@@ -222,7 +222,9 @@ export default class SchemaTable extends LitElement {
                   : ''
                 }
                 ${data['::type'] === 'xxx-of-option' || data['::type'] === 'xxx-of-array' || key.startsWith('::OPTION')
-                  ? html`<span class="xxx-of-key" style="margin-left:-6px">${keyLabel}</span><span class="${isOneOfLabel ? 'xxx-of-key' : 'xxx-of-descr'}">${keyDescr}</span>`
+                  ? (data['::hideOneOfIndex'] !== true
+                    ? html`<span class="xxx-of-key" style="margin-left:-6px">${keyLabel}</span><span class="${isOneOfLabel ? 'xxx-of-key' : 'xxx-of-descr'}">${keyDescr}</span>`
+                    : html`<span class="${isOneOfLabel ? 'xxx-of-key' : 'xxx-of-descr'}">${keyDescr}</span>`)
                   : keyLabel.endsWith('*')
                     ? html`<span class="key-label" style="display:inline-block; margin-left:-6px;">${data['::deprecated'] ? '✗' : ''} ${keyLabel.substring(0, keyLabel.length - 1)}</span><span style='color:var(--red);'>*</span>`
                     : html`<span class="key-label" style="display:inline-block; margin-left:-6px;">${data['::deprecated'] ? '✗' : ''} ${keyLabel === '::props' ? '' : keyLabel}</span>`
@@ -233,7 +235,7 @@ export default class SchemaTable extends LitElement {
                 ${(data['::type'] || '').includes('xxx-of') ? '' : detailObjType}
                 ${data['::readwrite'] === 'readonly' ? ' 🆁' : data['::readwrite'] === 'writeonly' ? ' 🆆' : ''}
               </div>
-              <div class='td key-descr m-markdown-small' style='line-height:1.7'>${unsafeHTML(marked(description || ''))}</div>
+              <div class='td key-descr m-markdown-small' style='line-height:1.7'>${data['::hideOneOfIndex'] === true ? '' : unsafeHTML(marked(description || ''))}</div>
             </div>`
           : html`
             ${data['::type'] === 'array' && dataType === 'array'
@@ -253,7 +255,7 @@ export default class SchemaTable extends LitElement {
           ? html`${this.generateTree(data[0], 'xxx-of-option', '', '::ARRAY~OF', '', newSchemaLevel, newIndentLevel, '')}`
           : html`
             ${Object.keys(data).map((dataKey) => html`
-              ${['::title', '::description', '::type', '::props', '::deprecated', '::array-type', '::readwrite', '::dataTypeLabel', '::nullable'].includes(dataKey)
+              ${['::title', '::description', '::type', '::props', '::deprecated', '::array-type', '::readwrite', '::dataTypeLabel', '::nullable', '::hideOneOfIndex'].includes(dataKey)
                 ? data[dataKey]['::type'] === 'array' || data[dataKey]['::type'] === 'object'
                   ? html`${this.generateTree(
                     data[dataKey]['::type'] === 'array' ? data[dataKey]['::props'] : data[dataKey],
@@ -330,7 +332,9 @@ export default class SchemaTable extends LitElement {
         <div class='td key-descr' style='font-size: var(--font-size-small)'>
           ${isOneOfEnumOption
             ? html`<span class="m-markdown-small">${description}</span>`
-            : html`
+            : type === 'const'
+              ? html`<span class="m-markdown-small">Value: ${allowedValues}</span>`
+              : html`
               ${html`<span class="m-markdown-small">
                 ${unsafeHTML(marked(dataType === 'array'
                   ? `${descrExpander} ${description}`

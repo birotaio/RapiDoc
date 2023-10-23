@@ -704,6 +704,9 @@ export function schemaInObjectNotation(schema, obj, level = 0, suffix = '') {
     schema[xxxOf].forEach((v, index) => {
       if (v.type === 'object' || v.properties || v.allOf || v.anyOf || v.oneOf) {
         const partialObj = schemaInObjectNotation(v, {});
+        if (schema['x-rapidoc-hide-oneof-index'] === true) {
+          partialObj['::hideOneOfIndex'] = true;
+        }
         objWithAnyOfProps[`::OPTION~${index + 1}${v.title ? `~${v.title}` : ''}`] = partialObj;
         objWithAnyOfProps[`::OPTION~${index + 1}${v.title ? `~${v.title}` : ''}`]['::readwrite'] = ''; // xxx-options cannot be read or write only
         objWithAnyOfProps['::type'] = 'xxx-of-option';
