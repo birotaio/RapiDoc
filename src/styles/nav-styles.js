@@ -129,6 +129,10 @@ export default css`
   border-left:4px solid transparent;
 }
 
+.nav-bar-info {
+  flex-wrap:wrap;
+}
+
 .nav-bar-h1,
 .nav-bar-h2,
 .nav-bar-path {

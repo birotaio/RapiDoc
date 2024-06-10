@@ -129,7 +129,7 @@ export default function navbarTemplate() {
               ${this.resolvedSpec.infoDescriptionHeaders.length > 0 ? html`<hr style='border-top: 1px solid var(--nav-hover-bg-color); border-width:1px 0 0 0; margin: 15px 0 0 0'/>` : ''}
             `
             : html`<div class='nav-bar-info ${this.navActiveItemMarker}' id='link-overview' data-action='navigate' data-content-id='overview' tabindex='0'> 
-              ${this.resolvedSpec.info?.title?.trim() || 'Overview'}
+              ${this.resolvedSpec.info?.title?.trim() || 'Overview'} ${this.resolvedSpec.info?.version ? html`<i style="width:100%; font-size:80%;">${this.resolvedSpec.info.version.trim()}</i> ` : ''}
             </div>`
           }
         `
