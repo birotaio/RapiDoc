@@ -1,7 +1,7 @@
 
 /**
 * @preserve
-* RapiDoc 9.3.7 - WebComponent to View OpenAPI docs
+* RapiDoc 9.3.71501 - WebComponent to View OpenAPI docs
 * License: MIT
 * Repo   : https://github.com/rapi-doc/RapiDoc
 * Author : Mrinmoy Majumdar
@@ -3252,10 +3252,10 @@ var prism_csharp = __webpack_require__(651);
   white-space: nowrap;
   border: 2px solid var(--primary-color);
   background-color:transparent;
-  transition: background-color 0.2s;
   user-select: none;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+  transition-duration: 0.75s;
 }
 .m-btn.primary {
   background-color: var(--primary-color);
@@ -3280,6 +3280,11 @@ var prism_csharp = __webpack_require__(651);
   border-color: var(--fg3);
   cursor: not-allowed;
   opacity: 0.4;
+}
+.m-btn:active {
+  filter: brightness(75%);
+  transform: scale(0.95);
+  transition:scale 0s;
 }
 .toolbar-btn {
   cursor: pointer;
@@ -3993,6 +3998,10 @@ pre[class*="language-"] {
   color: var(--nav-text-color);
   background: transparent;
   border-left:4px solid transparent;
+}
+
+.nav-bar-info {
+  flex-wrap:wrap;
 }
 
 .nav-bar-h1,
@@ -5157,7 +5166,7 @@ function securitySchemeTemplate() {
     </div>
     ${this.resolvedSpec.securitySchemes && this.resolvedSpec.securitySchemes.length > 0 ? ke`
         <table role="presentation" id="auth-table" class='m-table padded-12' style="width:100%;">
-          ${this.resolvedSpec.securitySchemes.map(v => ke`
+          ${this.resolvedSpec.securitySchemes.filter(v => v.scheme && v.type).map(v => ke`
             <tr id="security-scheme-${v.securitySchemeId}" class="${v.type.toLowerCase()}">
               <td style="max-width:500px; overflow-wrap: break-word;">
                 <div style="line-height:28px; margin-bottom:5px;">
@@ -5588,7 +5597,7 @@ function getTypeInfo(schema) {
     info.description = info.description || '';
   }
   // Set Allowed Values
-  info.allowedValues = schema.const ? schema.const : Array.isArray(schema.enum) ? schema.enum.map(v => getPrintableVal(v)).join('┃') : '';
+  info.allowedValues = schema.const !== undefined ? schema.const : Array.isArray(schema.enum) ? schema.enum.map(v => getPrintableVal(v)).join('┃') : '';
   if (dataType === 'array' && schema.items) {
     var _schema$items, _schema$items2;
     const arrayItemType = (_schema$items = schema.items) === null || _schema$items === void 0 ? void 0 : _schema$items.type;
@@ -6309,9 +6318,14 @@ function schemaInObjectNotation(schema, obj, level = 0, suffix = '') {
     // 2. Then show allof/anyof objects
     const objWithAnyOfProps = {};
     const xxxOf = schema.anyOf ? 'anyOf' : 'oneOf';
+    // if it is a oneOf with only constants, it can be interpreted as an enum with labels
+    const xxxOfEnum = schema.oneOf && schema.oneOf.every(v => v.type === 'const' && v.const !== undefined);
     schema[xxxOf].forEach((v, index) => {
       if (v.type === 'object' || v.properties || v.allOf || v.anyOf || v.oneOf) {
         const partialObj = schemaInObjectNotation(v, {});
+        if (schema['x-rapidoc-hide-oneof-index'] === true) {
+          partialObj['::hideOneOfIndex'] = true;
+        }
         objWithAnyOfProps[`::OPTION~${index + 1}${v.title ? `~${v.title}` : ''}`] = partialObj;
         objWithAnyOfProps[`::OPTION~${index + 1}${v.title ? `~${v.title}` : ''}`]['::readwrite'] = ''; // xxx-options cannot be read or write only
         objWithAnyOfProps['::type'] = 'xxx-of-option';
@@ -6322,14 +6336,23 @@ function schemaInObjectNotation(schema, obj, level = 0, suffix = '') {
         objWithAnyOfProps[`::OPTION~${index + 1}${v.title ? `~${v.title}` : ''}`]['::readwrite'] = ''; // xxx-options cannot be read or write only
         objWithAnyOfProps['::type'] = 'xxx-of-array';
       } else {
-        const prop = `::OPTION~${index + 1}${v.title ? `~${v.title}` : ''}`;
+        let prop = `::OPTION~${index + 1}${v.title ? `~${v.title}` : ''}`;
+        if (xxxOfEnum) {
+          prop = `::OPTION~ONEOFENUM~${index + 1}${v.title ? `~${v.title}` : ''}${v.description ? `~${v.description}` : ''}`;
+        }
         objWithAnyOfProps[prop] = `${getTypeInfo(v).html}`;
         objWithAnyOfProps['::type'] = 'xxx-of-option';
       }
     });
-    obj[schema.anyOf ? `::ANY~OF ${suffix}` : `::ONE~OF ${suffix}`] = objWithAnyOfProps;
-    // obj['::type'] = 'object';
-    obj['::type'] = 'object';
+    let objKey = schema.anyOf ? `::ANY~OF ${suffix}` : `::ONE~OF ${suffix}`;
+    if (xxxOfEnum) {
+      obj['::type'] = 'object';
+      obj['::dataTypeLabel'] = 'enum';
+      objKey = `::ONE~OF~ENUM ${suffix}`;
+    } else {
+      obj['::type'] = 'object';
+    }
+    obj[objKey] = objWithAnyOfProps;
   } else if (Array.isArray(schema.type)) {
     // When a property has multiple types, then check further if any of the types are array or object, if yes then modify the schema using one-of
     // Clone the schema - as it will be modified to replace multi-data-types with one-of;
@@ -6741,7 +6764,7 @@ class JsonTree extends lit_element_h {
   }
   generateTree(data, isLast = false) {
     if (data === null) {
-      return ke`<div class="null" style="display:inline;">null</div>`;
+      return ke`<span class="null">null</span>${isLast ? '' : ','}`;
     }
     if (typeof data === 'object' && data instanceof Date === false) {
       const detailType = Array.isArray(data) ? 'array' : 'pure_object';
@@ -6969,9 +6992,6 @@ class SchemaTree extends lit_element_h {
       .tree .key {
         max-width: 300px;
       }
-      .key.deprecated .key-label {
-        color: var(--red);
-      }
       .tr.expanded:hover > .td.key > .open-bracket {
         color: var(--primary-color);
       }
@@ -7118,7 +7138,7 @@ class SchemaTree extends lit_element_h {
         <div class="tr ${schemaLevel < this.schemaExpandLevel || (_data$Type2 = data['::type']) !== null && _data$Type2 !== void 0 && _data$Type2.startsWith('xxx-of') ? 'expanded' : 'collapsed'} ${data['::type'] || 'no-type-info'}${data['::nullable'] ? ' nullable' : ''}" title="${isDeprecated || data['::deprecated'] ? 'Deprecated' : ''}">
           <div class="td key ${isDeprecated || data['::deprecated'] ? 'deprecated' : ''}" style='min-width:${minFieldColWidth}px'>
             ${data['::type'] === 'xxx-of-option' || data['::type'] === 'xxx-of-array' || key.startsWith('::OPTION') ? ke`<span class='key-label xxx-of-key'> ${keyLabel}</span><span class="xxx-of-descr">${keyDescr}</span>` : keyLabel === '::props' || keyLabel === '::ARRAY~OF' ? '' : schemaLevel > 0 ? ke`<span class="key-label" title="${readOrWrite === 'readonly' ? 'Read-Only' : readOrWrite === 'writeonly' ? 'Write-Only' : ''}">
-                      ${isDeprecated || data['::deprecated'] ? '✗' : ''}
+                      ${isDeprecated || data['::deprecated'] ? ke`<svg viewBox="0 0 10 10" width="10" height="10" style="stroke:var(--red); margin-right:-6px"><path d="M2 2L8 8M2 8L8 2"/></svg>` : ''}
                       ${keyLabel.replace(/\*$/, '')}${keyLabel.endsWith('*') ? ke`<span style="color:var(--red)">*</span>` : ''}${readOrWrite === 'readonly' ? ke` 🆁` : readOrWrite === 'writeonly' ? ke` 🆆` : readOrWrite}:
                     </span>` : ''}
             ${openBracket}
@@ -7170,7 +7190,7 @@ class SchemaTree extends lit_element_h {
     return ke`
       <div class = "tr primitive" title="${deprecated ? 'Deprecated' : ''}">
         <div class="td key ${isDeprecated || deprecated}" style='min-width:${minFieldColWidth}px'>
-          ${isDeprecated || deprecated ? ke`<span style='color:var(--red);'>✗</span>` : ''}
+          ${isDeprecated || deprecated ? ke`<svg viewBox="0 0 10 10" width="10" height="10" style="stroke:var(--red); margin-right:-6px"><path d="M2 2L8 8M2 8L8 2"/></svg>` : ''}
           ${keyLabel.endsWith('*') ? ke`<span class="key-label">${keyLabel.substring(0, keyLabel.length - 1)}</span><span style='color:var(--red);'>*</span>:` : key.startsWith('::OPTION') ? ke`<span class='key-label xxx-of-key'>${keyLabel}</span><span class="xxx-of-descr">${keyDescr}</span>` : ke`<span class="key-label">${keyLabel}:</span>`}
           <span class="${dataTypeCss}" title="${finalReadWriteTip}"> 
             ${dataType === 'array' ? `[${type}]` : `${type}`}
@@ -7622,6 +7642,8 @@ class ApiRequest extends lit_element_h {
         }
       `, custom_styles];
   }
+
+  /* eslint-disable indent */
   render() {
     return ke`
     <div class="col regular-font request-panel ${'read focused'.includes(this.renderStyle) || this.callback === 'true' ? 'read-mode' : 'view-mode'}">
@@ -7689,8 +7711,6 @@ class ApiRequest extends lit_element_h {
       this.requestUpdate();
     }
   }
-
-  /* eslint-disable indent */
   renderExample(example, paramType, paramName) {
     var _example$value, _example$value2;
     return ke`
@@ -7793,7 +7813,7 @@ class ApiRequest extends lit_element_h {
       <tr title="${param.deprecated ? 'Deprecated' : ''}"> 
         <td rowspan="${this.allowTry === 'true' ? '1' : '2'}" style="width:${labelColWidth}; min-width:100px;">
           <div class="param-name ${param.deprecated ? 'deprecated' : ''}" >
-            ${param.deprecated ? ke`<span style='color:var(--red);'>✗</span>` : ''}
+            ${param.deprecated ? ke`<svg viewBox="0 0 10 10" width="10" height="10" style="stroke:var(--red); margin-right:-6px"><path d="M2 2L8 8M2 8L8 2"/></svg>` : ''}
             ${param.required ? ke`<span style='color:var(--red)'>*</span>` : ''}
             ${param.name}
           </div>
@@ -7884,6 +7904,11 @@ class ApiRequest extends lit_element_h {
                       @input=${e => {
         const requestPanelEl = this.getRequestPanel(e);
         this.liveCURLSyntaxUpdate(requestPanelEl);
+      }}
+                      @keydown=${e => {
+        if ((e.keyCode === 10 || e.keyCode === 13) && e.ctrlKey) {
+          return this.onTryClick(e);
+        }
       }}
                     />`}
             </td>` : ''}
@@ -8841,11 +8866,12 @@ class ApiRequest extends lit_element_h {
         respHeadersObj[hdr] = hdrVal;
         this.responseHeaders = `${this.responseHeaders}${hdr}: ${hdrVal}\n`;
       });
-      const contentType = fetchResponse.headers.get('content-type').split(';')[0].trim();
+      let contentType = fetchResponse.headers.get('content-type');
       const respEmpty = (await fetchResponse.clone().text()).length === 0;
       if (respEmpty) {
         this.responseText = '';
       } else if (contentType) {
+        contentType = contentType.split(';')[0].trim();
         if (contentType === 'application/x-ndjson') {
           this.responseText = await fetchResponse.text();
         } else if (contentType.includes('json')) {
@@ -9256,13 +9282,27 @@ class SchemaTable extends lit_element_h {
     let keyLabel = '';
     let keyDescr = '';
     let isOneOfLabel = false;
+    let isOneOfEnum = false;
+    let isOneOfEnumOption = false;
     if (key.startsWith('::ONE~OF') || key.startsWith('::ANY~OF')) {
-      keyLabel = key.replace('::', '').replace('~', ' ');
-      isOneOfLabel = true;
+      if (key.startsWith('::ONE~OF~ENUM')) {
+        isOneOfEnum = true;
+        keyLabel = 'ENUM';
+      } else {
+        keyLabel = key.replace('::', '').replace('~', ' ');
+        isOneOfLabel = true;
+      }
     } else if (key.startsWith('::OPTION')) {
       const parts = key.split('~');
-      keyLabel = parts[1]; // eslint-disable-line prefer-destructuring
-      keyDescr = parts[2]; // eslint-disable-line prefer-destructuring
+      if (parts[1] === 'ONEOFENUM') {
+        isOneOfEnumOption = true;
+        keyLabel = parts[2]; // eslint-disable-line prefer-destructuring
+        keyDescr = parts[3]; // eslint-disable-line prefer-destructuring
+        description = parts[4]; // eslint-disable-line prefer-destructuring
+      } else {
+        keyLabel = parts[1]; // eslint-disable-line prefer-destructuring
+        keyDescr = parts[2]; // eslint-disable-line prefer-destructuring
+      }
     } else {
       keyLabel = key;
     }
@@ -9284,20 +9324,20 @@ class SchemaTable extends lit_element_h {
     if (typeof data === 'object') {
       return ke`
         ${newSchemaLevel >= 0 && key ? ke`
-            <div class='tr ${newSchemaLevel <= this.schemaExpandLevel ? 'expanded' : 'collapsed'} ${data['::type']}' data-obj='${keyLabel}' title="${isDeprecated || data['::deprecated'] ? 'Deprecated' : ''}">
+            <div class='tr ${isOneOfEnum || newSchemaLevel <= this.schemaExpandLevel ? 'expanded' : 'collapsed'} ${data['::type']}' data-obj='${keyLabel}' title="${isDeprecated || data['::deprecated'] ? 'Deprecated' : ''}">
               <div class="td key ${isDeprecated || data['::deprecated'] ? 'deprecated' : ''}" style='padding-left:${leftPadding}px'>
-                ${keyLabel || keyDescr ? ke`
+                ${!isOneOfEnum && (keyLabel || keyDescr) ? ke`
                     <span class='obj-toggle ${newSchemaLevel < this.schemaExpandLevel ? 'expanded' : 'collapsed'}' data-obj='${keyLabel}'>
                       ${schemaLevel < this.schemaExpandLevel ? '-' : '+'}
                     </span>` : ''}
-                ${data['::type'] === 'xxx-of-option' || data['::type'] === 'xxx-of-array' || key.startsWith('::OPTION') ? ke`<span class="xxx-of-key" style="margin-left:-6px">${keyLabel}</span><span class="${isOneOfLabel ? 'xxx-of-key' : 'xxx-of-descr'}">${keyDescr}</span>` : keyLabel.endsWith('*') ? ke`<span class="key-label" style="display:inline-block; margin-left:-6px;">${isDeprecated || data['::deprecated'] ? '✗' : ''} ${keyLabel.substring(0, keyLabel.length - 1)}</span><span style='color:var(--red);'>*</span>` : ke`<span class="key-label" style="display:inline-block; margin-left:-6px;">${isDeprecated || data['::deprecated'] ? '✗' : ''} ${keyLabel === '::props' ? '' : keyLabel}</span>`}
+                ${data['::type'] === 'xxx-of-option' || data['::type'] === 'xxx-of-array' || key.startsWith('::OPTION') ? data['::hideOneOfIndex'] !== true ? ke`<span class="xxx-of-key" style="margin-left:-6px">${keyLabel}</span><span class="${isOneOfLabel ? 'xxx-of-key' : 'xxx-of-descr'}">${keyDescr}</span>` : ke`<span class="${isOneOfLabel ? 'xxx-of-key' : 'xxx-of-descr'}">${keyDescr}</span>` : keyLabel.endsWith('*') ? ke`<span class="key-label" style="display:inline-block; margin-left:-6px;">${isDeprecated || data['::deprecated'] ? ke`<svg viewBox="0 0 10 10" width="10" height="10" style="stroke:var(--red); margin-right:-6px"><path d="M2 2L8 8M2 8L8 2"/></svg>` : ''} ${keyLabel.substring(0, keyLabel.length - 1)}</span><span style='color:var(--red);'>*</span>` : ke`<span class="key-label" style="display:inline-block; margin-left:-6px;">${isDeprecated || data['::deprecated'] ? ke`<svg viewBox="0 0 10 10" width="10" height="10" style="stroke:var(--red); margin-right:-6px"><path d="M2 2L8 8M2 8L8 2"/></svg>` : ''} ${keyLabel === '::props' ? '' : keyLabel}</span>`}
                 ${data['::type'] === 'xxx-of' && dataType === 'array' ? ke`<span style="color:var(--primary-color)">ARRAY</span>` : ''} 
               </div>
               <div class='td key-type' title="${data['::readwrite'] === 'readonly' ? 'Read-Only' : data['::readwrite'] === 'writeonly' ? 'Write-Only' : ''}">
                 ${(data['::type'] || '').includes('xxx-of') ? '' : detailObjType}
                 ${data['::readwrite'] === 'readonly' ? ' 🆁' : data['::readwrite'] === 'writeonly' ? ' 🆆' : ''}
               </div>
-              <div class='td key-descr m-markdown-small' style='line-height:1.7'>${unsafe_html_ae(marked(description || ''))}</div>
+              <div class='td key-descr m-markdown-small' style='line-height:1.7'>${data['::hideOneOfIndex'] === true ? '' : unsafe_html_ae(marked(description || ''))}</div>
             </div>` : ke`
             ${data['::type'] === 'array' && dataType === 'array' ? ke`
                 <div class='tr'> 
@@ -9312,7 +9352,7 @@ class SchemaTable extends lit_element_h {
             ${Object.keys(data).map(dataKey => {
         var _data$dataKey;
         return ke`
-              ${['::title', '::description', '::type', '::props', '::deprecated', '::array-type', '::readwrite', '::dataTypeLabel', '::nullable'].includes(dataKey) ? data[dataKey]['::type'] === 'array' || data[dataKey]['::type'] === 'object' ? ke`${this.generateTree(data[dataKey]['::type'] === 'array' ? data[dataKey]['::props'] : data[dataKey], data[dataKey]['::type'], data[dataKey]['::array-type'] || '', dataKey, data[dataKey]['::description'], newSchemaLevel, newIndentLevel, data[dataKey]['::readwrite'] ? data[dataKey]['::readwrite'] : '', isDeprecated || data[dataKey]['::deprecated'])}` : '' : ke`${this.generateTree(data[dataKey]['::type'] === 'array' ? data[dataKey]['::props'] : data[dataKey], data[dataKey]['::type'], data[dataKey]['::array-type'] || '', dataKey, ((_data$dataKey = data[dataKey]) === null || _data$dataKey === void 0 ? void 0 : _data$dataKey['::description']) || '', newSchemaLevel, newIndentLevel, data[dataKey]['::readwrite'] ? data[dataKey]['::readwrite'] : '', isDeprecated || data[dataKey]['::deprecated'])}`}
+              ${['::title', '::description', '::type', '::props', '::deprecated', '::array-type', '::readwrite', '::dataTypeLabel', '::nullable', '::hideOneOfIndex'].includes(dataKey) ? data[dataKey]['::type'] === 'array' || data[dataKey]['::type'] === 'object' ? ke`${this.generateTree(data[dataKey]['::type'] === 'array' ? data[dataKey]['::props'] : data[dataKey], data[dataKey]['::type'], data[dataKey]['::array-type'] || '', dataKey, data[dataKey]['::description'], newSchemaLevel, newIndentLevel, data[dataKey]['::readwrite'] ? data[dataKey]['::readwrite'] : '', isDeprecated || data[dataKey]['::deprecated'])}` : '' : ke`${this.generateTree(data[dataKey]['::type'] === 'array' ? data[dataKey]['::props'] : data[dataKey], data[dataKey]['::type'], data[dataKey]['::array-type'] || '', dataKey, ((_data$dataKey = data[dataKey]) === null || _data$dataKey === void 0 ? void 0 : _data$dataKey['::description']) || '', newSchemaLevel, newIndentLevel, data[dataKey]['::readwrite'] ? data[dataKey]['::readwrite'] : '', isDeprecated || data[dataKey]['::deprecated'])}`}
             `;
       })}
           `}
@@ -9337,6 +9377,11 @@ class SchemaTable extends lit_element_h {
         <div class='td key-type ${dataTypeCss}' title="${readOrWrite === 'readonly' ? 'Read-Only' : readOrWriteOnly === 'writeonly' ? 'Write-Only' : ''}">
           [${type}] ${readOrWrite === 'readonly' ? '🆁' : readOrWrite === 'writeonly' ? '🆆' : ''}
         </div>`;
+    } else if (isOneOfEnumOption) {
+      dataTypeHtml = ke` 
+        <div class='td key-type ${dataTypeCss}' title="${readOrWriteOnly === '🆁' ? 'Read-Only' : readOrWriteOnly === '🆆' ? 'Write-Only' : ''}">
+        <span class='xxx-of-key'>${allowedValues}</span> ${readOrWriteOnly}
+        </div>`;
     } else {
       dataTypeHtml = ke` 
         <div class='td key-type ${dataTypeCss}' title="${readOrWriteOnly === '🆁' ? 'Read-Only' : readOrWriteOnly === '🆆' ? 'Write-Only' : ''}">
@@ -9346,20 +9391,23 @@ class SchemaTable extends lit_element_h {
     return ke`
       <div class = "tr primitive" title="${isDeprecated || deprecated ? 'Deprecated' : ''}">
         <div class="td key ${isDeprecated || deprecated ? 'deprecated' : ''}" style='padding-left:${leftPadding}px'>
-          ${isDeprecated || deprecated ? ke`<span style='color:var(--red);'>✗</span>` : ''}
+          ${isDeprecated || deprecated ? ke`<svg viewBox="0 0 10 10" width="10" height="10" style="stroke:var(--red); margin-right:-6px"><path d="M2 2L8 8M2 8L8 2"/></svg>` : ''}
           ${(_keyLabel = keyLabel) !== null && _keyLabel !== void 0 && _keyLabel.endsWith('*') ? ke`
               <span class="key-label">${keyLabel.substring(0, keyLabel.length - 1)}</span>
-              <span style='color:var(--red);'>*</span>` : key.startsWith('::OPTION') ? ke`<span class='xxx-of-key'>${keyLabel}</span><span class="xxx-of-descr">${keyDescr}</span>` : ke`${keyLabel ? ke`<span class="key-label"> ${keyLabel}</span>` : ke`<span class="xxx-of-descr">${schemaTitle}</span>`}`}
+              <span style='color:var(--red);'>*</span>` : key.startsWith('::OPTION') ? ke` ${isOneOfEnumOption ? '' : ke`<span class='xxx-of-key'>${keyLabel}</span>`}
+                      <span class="xxx-of-descr">${keyDescr}</span>` : ke`${keyLabel ? ke`<span class="key-label"> ${keyLabel}</span>` : ke`<span class="xxx-of-descr">${schemaTitle}</span>`}`}
         </div>
         ${dataTypeHtml}
         <div class='td key-descr' style='font-size: var(--font-size-small)'>
-          ${ke`<span class="m-markdown-small">
-            ${unsafe_html_ae(marked(dataType === 'array' ? `${descrExpander} ${description}` : schemaTitle ? `${descrExpander} <b>${schemaTitle}:</b> ${schemaDescription}` : `${descrExpander} ${schemaDescription}`))}
-          </span>`}
-          ${constraint ? ke`<div class='' style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Constraints: </span> ${constraint}</div>` : ''}
-          ${defaultValue ? ke`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Default: </span>${defaultValue}</div>` : ''}
-          ${allowedValues ? ke`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>${type === 'const' ? 'Value' : 'Allowed'}: </span>${allowedValues}</div>` : ''}
-          ${pattern ? ke`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Pattern: </span>${pattern}</div>` : ''}
+          ${isOneOfEnumOption ? ke`<span class="m-markdown-small">${description}</span>` : type === 'const' ? ke`<span class="m-markdown-small">Value: ${allowedValues}</span>` : ke`
+              ${ke`<span class="m-markdown-small">
+                ${unsafe_html_ae(marked(dataType === 'array' ? `${descrExpander} ${description}` : schemaTitle ? `${descrExpander} <b>${schemaTitle}:</b> ${schemaDescription}` : `${descrExpander} ${schemaDescription}`))}
+              </span>`}
+              ${constraint ? ke`<div class='' style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Constraints: </span> ${constraint}</div>` : ''}
+              ${defaultValue ? ke`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Default: </span>${defaultValue}</div>` : ''}
+              ${allowedValues ? ke`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>${type === 'const' ? 'Value' : 'Allowed'}: </span>${allowedValues}</div>` : ''}
+              ${pattern ? ke`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Pattern: </span>${pattern}</div>` : ''}
+            `}
         </div>
       </div>
     `;
@@ -10202,7 +10250,7 @@ function navBarClickAndEnterHandler(event) {
 
 /* eslint-disable indent */
 function navbarTemplate() {
-  var _this$resolvedSpec$in, _this$resolvedSpec$in2;
+  var _this$resolvedSpec$in, _this$resolvedSpec$in2, _this$resolvedSpec$in3;
   if (!this.resolvedSpec || this.resolvedSpec.specLoadError) {
     return ke`
       <nav class='nav-bar' part='section-navbar'>
@@ -10258,7 +10306,7 @@ function navbarTemplate() {
               </div>
               ${this.resolvedSpec.infoDescriptionHeaders.length > 0 ? ke`<hr style='border-top: 1px solid var(--nav-hover-bg-color); border-width:1px 0 0 0; margin: 15px 0 0 0'/>` : ''}
             ` : ke`<div class='nav-bar-info ${this.navActiveItemMarker}' id='link-overview' data-action='navigate' data-content-id='overview' tabindex='0'> 
-              ${((_this$resolvedSpec$in2 = this.resolvedSpec.info) === null || _this$resolvedSpec$in2 === void 0 || (_this$resolvedSpec$in2 = _this$resolvedSpec$in2.title) === null || _this$resolvedSpec$in2 === void 0 ? void 0 : _this$resolvedSpec$in2.trim()) || 'Overview'}
+              ${((_this$resolvedSpec$in2 = this.resolvedSpec.info) === null || _this$resolvedSpec$in2 === void 0 || (_this$resolvedSpec$in2 = _this$resolvedSpec$in2.title) === null || _this$resolvedSpec$in2 === void 0 ? void 0 : _this$resolvedSpec$in2.trim()) || 'Overview'} ${(_this$resolvedSpec$in3 = this.resolvedSpec.info) !== null && _this$resolvedSpec$in3 !== void 0 && _this$resolvedSpec$in3.version ? ke`<i style="width:100%; font-size:80%;">${this.resolvedSpec.info.version.trim()}</i> ` : ''}
             </div>`}
         `}
     
@@ -10696,7 +10744,7 @@ function endpointTemplate(isMini = false, pathsExpanded = false) {
 function logoTemplate(style) {
   return ke`
   <div style=${style}>
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="1 0 511 512">
+    <svg viewBox="1 0 511 512">
       <path d="M351 411a202 202 0 01-350 0 203 203 0 01333-24 203 203 0 0117 24zm0 0" fill="#adc165"/>
       <path d="M334 387a202 202 0 01-216-69 202 202 0 01216 69zm78 32H85a8 8 0 01-8-8 8 8 0 018-8h327a8 8 0 017 8 8 8 0 01-7 8zm0 0" fill="#99aa52"/>
       <path d="M374 338l-5 30a202 202 0 01-248-248 203 203 0 01253 218zm0 0" fill="#ffc73b"/>
@@ -12878,6 +12926,10 @@ class RapiDocMini extends lit_element_h {
       allowTry: {
         type: String,
         attribute: 'allow-try'
+      },
+      showCurlBeforeTry: {
+        type: String,
+        attribute: 'show-curl-before-try'
       },
       // Main Colors and Font
       theme: {
@@ -20609,7 +20661,7 @@ function getType(str) {
 /******/ 	
 /******/ 	/* webpack/runtime/getFullHash */
 /******/ 	(() => {
-/******/ 		__webpack_require__.h = () => ("ab239753a7c115a89c24")
+/******/ 		__webpack_require__.h = () => ("b9a86383bb64b32cffda")
 /******/ 	})();
 /******/ 	
 /******/ 	/* webpack/runtime/global */
@@ -20632,7 +20684,7 @@ function getType(str) {
 /******/ 	/* webpack/runtime/load script */
 /******/ 	(() => {
 /******/ 		var inProgress = {};
-/******/ 		var dataWebpackPrefix = "rapidoc:";
+/******/ 		var dataWebpackPrefix = "@fifteen/rapidoc:";
 /******/ 		// loadScript function to load a script via script tag
 /******/ 		__webpack_require__.l = (url, done, key, chunkId) => {
 /******/ 			if(inProgress[url]) { inProgress[url].push(done); return; }
@@ -21114,7 +21166,7 @@ function getType(str) {
 /******/ 			});
 /******/ 		}
 /******/ 		
-/******/ 		self["webpackHotUpdaterapidoc"] = (chunkId, moreModules, runtime) => {
+/******/ 		self["webpackHotUpdate_fifteen_rapidoc"] = (chunkId, moreModules, runtime) => {
 /******/ 			for(var moduleId in moreModules) {
 /******/ 				if(__webpack_require__.o(moreModules, moduleId)) {
 /******/ 					currentUpdate[moduleId] = moreModules[moduleId];
